@@ -1,17 +1,10 @@
 streamlit
 requests
-ast
-tempfile
-os
-datetime 
 langchain
 langchain-community
 langchain-core
 langchain-huggingface
 langchain-text-splitters
-langchain_community.embeddings 
-langdetect
-langsmith
 chromadb
 httpx
 pypdf
@@ -21,6 +14,5 @@ docx2txt
 html5lib
 jq
 lxml
-openpyxl
 python-docx
 unstructured
