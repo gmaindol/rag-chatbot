@@ -110,9 +110,9 @@ If you have pre-indexed company/personal data:
 5. Ensure the output is stored in the directory specified by `chroma_db
 
 ### 5. Build and Start the Service
-**Run and Create Docker Image
+**Run and Create Docker Image**
 
-`docker compose up --build -d
+`docker compose up --build -d`
 
 Check the logs for error
 `docker compose logs -f`
