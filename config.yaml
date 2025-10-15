@@ -1,0 +1,45 @@
+model_list:
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: ${OPENAI_API_KEY}
+      guardrails: ["panw_prisma_airs_pre"]
+  - model_name: gemma3-27b
+    litellm_params:
+      model: ollama/gemma3:27b
+      api_base: ${OLLAMA_BASE_URL}
+      api_key: fake
+      guardrails: ["panw_prisma_airs_post"]
+  - model_name: phi3-14b
+    litellm_params:
+      model: ollama/phi3:14b
+      api_base: ${OLLAMA_BASE_URL}
+      api_key: fake
+      guardrails: ["panw_prisma_airs_pre"]
+  - model_name: gpt-oss-20b
+    litellm_params:
+      model: ollama/gpt-oss:20b
+      api_base: ${OLLAMA_BASE_URL}
+      api_key: fake
+      guardrails: ["panw_prisma_airs_pre"]
+
+guardrails:
+  - guardrail_name: "panw_prisma_airs_pre"
+    litellm_params:
+      guardrail: panw_prisma_airs
+      mode: "pre_call"
+      default_on: true
+      api_key: ${AIRS_API_KEY}
+      profile_name: ${AIRS_PROFILE_NAME}
+      api_base: "https://service.api.aisecurity.paloaltonetworks.com"
+  - guardrail_name: "panw_prisma_airs_post"
+    litellm_params:
+      guardrail: panw_prisma_airs
+      mode: "post_call"
+      default_on: true
+      api_key: ${AIRS_API_KEY}
+      profile_name: ${AIRS_PROFILE_NAME}
+      api_base: "https://service.api.aisecurity.paloaltonetworks.com"
+
+litellm_settings:
+  set_verbose: true

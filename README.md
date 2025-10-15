@@ -68,7 +68,7 @@ UV is a next-generation Python package and project manager designed to replace t
 
 ```bash
 uv init
-uv venv rag-chatbot
+uv venv
 source venv/bin/activate
 ```
 
