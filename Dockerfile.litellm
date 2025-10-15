@@ -1,0 +1,52 @@
+FROM cgr.dev/chainguard/python:latest-dev
+
+USER root
+WORKDIR /app
+
+ENV HOME=/home/litellm
+ENV PATH="${HOME}/venv/bin:$PATH"
+
+# Install runtime dependencies
+RUN apk update && \
+    apk add --no-cache gcc python3-dev openssl openssl-dev
+
+RUN python -m venv ${HOME}/venv
+RUN ${HOME}/venv/bin/pip install --no-cache-dir --upgrade pip
+
+COPY requirements.txt .
+# Copy config.yaml as a template
+COPY config.yaml config.yaml.template
+COPY .env* ./
+RUN --mount=type=cache,target=${HOME}/.cache/pip \
+    ${HOME}/venv/bin/pip install -r requirements.txt
+
+###LiteLLM doesn't auto-substitute ${ENV_VAR} syntax in YAML configs!
+### So we create a startup script that does this before starting LiteLLM
+### But LiteLLM was reading ${AIRS_API_KEY} as a literal string, not substituting it
+### The solution: Pre-process the config with a startup script to substitute variables before LiteLLM loads the file.
+# Create startup script that substitutes env vars before starting LiteLLM
+RUN printf '#!/bin/sh\n\
+echo "=== Substituting environment variables ==="\n\
+python3 -c "\n\
+import os, re\n\
+with open(\"config.yaml.template\") as f:\n\
+    content = f.read()\n\
+def replace_env(match):\n\
+    var_name = match.group(1)\n\
+    value = os.environ.get(var_name, match.group(0))\n\
+    print(f\"Replacing {match.group(0)} with {var_name}=[REDACTED]\")\n\
+    return value\n\
+content = re.sub(r\"\\\$\\\{([^}]+)\\\}\", replace_env, content)\n\
+with open(\"config.yaml\", \"w\") as f:\n\
+    f.write(content)\n\
+print(\"=== Substitution complete ===\")\n\
+"\n\
+echo "Starting LiteLLM..."\n\
+exec litellm "$@"\n' > /app/start.sh && chmod +x /app/start.sh
+
+EXPOSE 4000/tcp
+
+HEALTHCHECK CMD curl --fail http://localhost:4000/health || exit 1
+
+ENTRYPOINT ["/app/start.sh"]
+CMD ["--config", "config.yaml", "--detailed_debug", "--port", "4000", "--host", "0.0.0.0"]
