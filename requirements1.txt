@@ -16,3 +16,4 @@ jq
 lxml
 python-docx
 unstructured
+sentence-transformers
