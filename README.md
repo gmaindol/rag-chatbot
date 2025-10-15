@@ -74,8 +74,8 @@ source venv/bin/activate
 
 ### 3. Setting Environment Variables
 Edit .env with you credentials
-`mv .env.example .env
-`nano .env # or use your preferred editor`
+`mv .env.example .env`
+`nano .env` # or use your preferred editor`
 
 ```
 OPENAI_API_KEY=XXXX #provide your OpenAI API key here
