@@ -51,7 +51,7 @@ This is an improved **Retrieval-Augmented Generation (RAG) Chatbot** powered by 
 
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/gmaindol/rag-chatbot.git
 cd rag-chatbot
 ```
 
