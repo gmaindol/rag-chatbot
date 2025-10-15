@@ -88,9 +88,9 @@ STREAMLIT_SERVER_ADDRESS=0.0.0.0
 
 STREAMLIT_CLIENT_TOOLBARCURRENTTOOL=null
 
-AIRS_API_KEY=XXX #provide your AIRS API key here
+AIRS_API_KEY=YOUR_PRISAM_AIRS_API #provide your AIRS API key here
 
-AIRS_PROFILE_NAME=XXX #provide your AIRS profile name here
+AIRS_PROFILE_NAME=PRISMA_AIRS_SECURITY_PROFILE_NAME #provide your AIRS profile name here
 
 LITELLM_PROXY_URL=http://litellm:4000/v1/chat/completions
 ```
