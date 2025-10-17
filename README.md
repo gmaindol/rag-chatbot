@@ -139,15 +139,15 @@ Two guardrail modes are configured:
 ## 📁 Project Structure 
 
  rag-chatbot/ 
-	├── docker-compose.yaml # Docker Compose configuration 
-	├── Dockerfile.litellm # LiteLLM service 
-	├── Dockerfile.streamlit # Streamlit frontend 
-	├── config.yaml # LiteLLM configuration (with env vars) 
-	├── app.py # Streamlit application 
-	├── requirements.txt # LiteLLM dependencies 
-	├── requirements1.txt # Streamlit dependencies 
-	├── .env.example # Environment variables template 
-	└── README.md # This file 
+├── docker-compose.yaml # Docker Compose configuration 
+├── Dockerfile.litellm # LiteLLM service 
+├── Dockerfile.streamlit # Streamlit frontend 
+├── config.yaml # LiteLLM configuration (with env vars) 
+├── app.py # Streamlit application 
+├── requirements.txt # LiteLLM dependencies 
+├── requirements1.txt # Streamlit dependencies 
+├── .env.example # Environment variables template 
+└── README.md # This file 
 
 ## 🔧 Troubleshooting 
 ### LiteLLM shows 403 Forbidden errors 
