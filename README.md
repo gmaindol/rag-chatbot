@@ -69,7 +69,7 @@ UV is a next-generation Python package and project manager designed to replace t
 ```bash
 uv init
 uv venv
-source venv/bin/activate
+source .venv/bin/activate
 ```
 
 ### 3. Setting Environment Variables
@@ -112,7 +112,7 @@ If you have pre-indexed company/personal data:
 ### 5. Build and Start the Service
 **Run and Create Docker Image**
 
-`docker compose up --build -d`
+`sudo docker compose up --build -d`
 
 Check the logs for error
 `docker compose logs -f`
