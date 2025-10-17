@@ -154,6 +154,8 @@ rag-chatbot/
 ├── CONTRIBUTING.md           # Contribution guidelines
 ├── data/                     # Source documents for indexing
 ├── chroma_db/                # Vector database storage
+```
+
 
 ## 🔧 Troubleshooting 
 ### LiteLLM shows 403 Forbidden errors 
