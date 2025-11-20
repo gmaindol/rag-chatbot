@@ -423,31 +423,55 @@ Answer:"""
             except requests.exceptions.HTTPError as http_err:
                 status_code = http_err.response.status_code
                 if status_code in [400, 403]:
-                    print(f"Raw HTTP Error Response: {http_err.response.text}")
+                    raw_response = http_err.response.text
+                    print(f"Raw HTTP Error Response: {raw_response}")
+                    
                     try:
                         error_data = http_err.response.json()
+                        print(f"Parsed error_data: {json.dumps(error_data, indent=2)}")
+                        
                         outer_error = error_data.get("error", {})
+                        print(f"Outer error: {outer_error}")
                         
                         # Handle the nested JSON string in 'error.message'
-                        inner_message_str = outer_error.get("message", "{}").replace("'", "\"")
+                        inner_message = outer_error.get("message", "{}")
+                        print(f"Inner message (type: {type(inner_message).__name__}): {inner_message}")
                         
-                        # Fix for potential string/dict issue in outer_error.message
-                        if isinstance(inner_message_str, str) and inner_message_str.startswith('{'):
-                            inner_error_data = json.loads(inner_message_str)
-                            guardrail_details = inner_error_data.get("error", {})
-                        elif isinstance(outer_error.get("message"), dict):
-                            # Fallback if the outer message was already a dict (less likely but robust)
-                            guardrail_details = outer_error.get("message", {}).get("error", {})
-                        else:
-                            # Final fallback for minimal data
-                            raise ValueError("Could not parse detailed error.")
-
+                        guardrail_details = {}
+                        
+                        # Try multiple parsing strategies
+                        if isinstance(inner_message, dict):
+                            # Message is already a dictionary
+                            guardrail_details = inner_message.get("error", {})
+                        elif isinstance(inner_message, str):
+                            # Try to parse as JSON string
+                            try:
+                                # Replace single quotes with double quotes for valid JSON
+                                cleaned_message = inner_message.replace("'", '"')
+                                inner_error_data = json.loads(cleaned_message)
+                                guardrail_details = inner_error_data.get("error", {})
+                            except json.JSONDecodeError:
+                                # Try using ast.literal_eval for Python dict strings
+                                try:
+                                    inner_error_data = ast.literal_eval(inner_message)
+                                    if isinstance(inner_error_data, dict):
+                                        guardrail_details = inner_error_data.get("error", {})
+                                except (ValueError, SyntaxError):
+                                    print(f"Failed to parse inner message with ast.literal_eval")
+                        
+                        print(f"Guardrail details: {guardrail_details}")
+                        
+                        # Extract all the details
                         category = guardrail_details.get("category", "undetermined")
                         guardrail = guardrail_details.get("guardrail", "unknown")
                         type_ = guardrail_details.get("type", "None")
                         code_ = guardrail_details.get("code", "None")
                         scan_id = guardrail_details.get("scan_id", "None")
                         report_id = guardrail_details.get("report_id", "None")
+                        
+                        # Check if we actually got meaningful data
+                        if guardrail == "unknown" and category == "undetermined":
+                            raise ValueError("Could not extract guardrail details")
                         
                         full_response = (
                             f"⚠️ **SECURITY ALERT:** Your request was blocked due to a guardrail policy violation.\n\n"
@@ -461,7 +485,9 @@ Answer:"""
                             f"This incident has been logged for compliance purposes. Please contact your administrator for assistance.\n\n"
                             f"For support, reach out to: **it.security@yourorganization.com**"
                         )
-                    except (json.JSONDecodeError, ValueError, AttributeError) as parse_err:
+                        
+                    except Exception as parse_err:
+                        print(f"Error parsing guardrail response: {type(parse_err).__name__}: {parse_err}")
                         full_response = (
                             f"⚠️ **SECURITY ALERT:** Your request was blocked due to a guardrail policy violation.\n\n"
                             f"**Details:**\n"
@@ -470,6 +496,7 @@ Answer:"""
                             f"This incident has been logged. Please contact your administrator for assistance.\n\n"
                             f"*(Raw response details in console.)*"
                         )
+                    
                     st.warning(full_response)
                 else:
                     full_response = f"⚠️ Error communicating with LiteLLM proxy: {http_err}"
@@ -497,4 +524,3 @@ st.markdown("""
     <p>Session Duration: Active | Questions Processed: """ + str(len([m for m in st.session_state.messages if m['role'] == 'user'])) + """</p>
 </div>
 """, unsafe_allow_html=True)
-
