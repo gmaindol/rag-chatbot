@@ -174,12 +174,12 @@ for msg in st.session_state.messages:
                     if st.button("👍", key=f"up_final_{len(st.session_state.messages)}"):
                          conn.execute("INSERT INTO feedback (session_id, timestamp, query, response, thumbs) VALUES (?, ?, ?, ?, ?)",
                                     (st.session_state.session_id, datetime.now().isoformat(), prompt, full, "up"))
-                        conn.commit()
+                         conn.commit()
                 with col3:
                     if st.button("👎", key=f"down_final_{len(st.session_state.messages)}"):
-                        conn.execute("INSERT INTO feedback (session_id, timestamp, query, response, thumbs) VALUES (?, ?, ?, ?, ?)",
+                         conn.execute("INSERT INTO feedback (session_id, timestamp, query, response, thumbs) VALUES (?, ?, ?, ?, ?)",
                                     (st.session_state.session_id, datetime.now().isoformat(), prompt, full, "down"))
-                        conn.commit()
+                         conn.commit()
                 with col4:
                     if st.button("✏️ Edit question", key=f"edit_{msg.get('id')}"):
                         st.session_state.pending_edit = st.session_state.messages[-2]["content"]
