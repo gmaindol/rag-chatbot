@@ -5,25 +5,42 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from openai import OpenAI, APIError
+import hashlib  # Fixed: Added for session ID
+import json
 import os
 import re
+import sqlite3
 import streamlit as st
 import tempfile
-import hashlib
 
 # ==================================== CONFIG ====================================
 VECTOR_DB_DIR = "./chroma_db"
+DYNAMIC_DB_DIR = "./dynamic_dbs"  # NEW: Folder for persistent dynamic DBs
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 LITELLM_PROXY_URL = os.getenv("LITELLM_PROXY_URL", "http://localhost:4000").strip()
 MODEL_CHOICES = ["gpt-4o", "gemma3-27b", "gpt-oss-20b", "phi3-14b"]
 SUGGESTION_MODEL = "gpt-4o"
+LOG_DB = "feedback_logs.db"  # NEW: SQLite DB for logs
+
+# NEW: Setup SQLite for feedback
+conn = sqlite3.connect(LOG_DB, check_same_thread=False)
+conn.execute("""CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT,
+    timestamp TEXT,
+    query TEXT,
+    response TEXT,
+    thumbs TEXT,
+    user_id TEXT
+)""")
+conn.commit()
 
 # =========================== OPENAI + RANKER SETUP ===========================
 clean_url = re.sub(r"(https?://[^/]+)(/v1.*|$)", r"\1", LITELLM_PROXY_URL).rstrip("/")
 client = OpenAI(base_url=clean_url, api_key="sk-no-key-required", timeout=90, max_retries=2)
 
-# FlashRank reranker (lightweight, zero-dependency after install)
-ranker = Ranker()  # default = ms-marco-MiniLM-L-12-v2 (perfect speed/accuracy)
+# FlashRank reranker
+ranker = Ranker()
 
 # =============================== RAG SETUP ====================================
 @st.cache_resource
@@ -33,6 +50,7 @@ def get_embeddings():
 embeddings = get_embeddings()
 static_db = Chroma(persist_directory=VECTOR_DB_DIR, embedding_function=embeddings) if os.path.exists(VECTOR_DB_DIR) else None
 
+# ============================ FILE PROCESSING =================================
 def process_uploaded_files(files, emb):
     if not files or not emb: return None
     docs = []
@@ -48,7 +66,7 @@ def process_uploaded_files(files, emb):
             ext = f.name.lower().split(".")[-1]
             loader_map = {
                 "pdf": PyPDFLoader, "docx": UnstructuredWordDocumentLoader,
-                "csv": CSVLoader, "json": lambda p: JSONLoader(p, jq_schema=".", text_content=False)
+                "csv": CSVLoader, "json": lambda p: JSONLoader(p, jq_schema=".")
             }
             loader = loader_map.get(ext, TextLoader)(path)
             chunks = splitter.split_documents(loader.load())
@@ -59,11 +77,16 @@ def process_uploaded_files(files, emb):
             st.warning(f"Failed to process {f.name}: {e}")
         finally:
             os.unlink(path)
-    return Chroma.from_documents(docs, emb, collection_name="session") if docs else None
+    return docs  # NEW: Return chunks only (append to persistent DB later)
+
+# NEW: Load or create persistent dynamic DB per session
+def get_dynamic_db(session_id):
+    persist_dir = os.path.join(DYNAMIC_DB_DIR, session_id)
+    os.makedirs(persist_dir, exist_ok=True)
+    return Chroma(persist_directory=persist_dir, embedding_function=embeddings)
 
 # ============================= HYDE + RETRIEVAL + RERANK =============================
 def hyde_query(user_question: str) -> str:
-    """Generate a hypothetical answer to improve retrieval"""
     try:
         response = client.chat.completions.create(
             model=SUGGESTION_MODEL,
@@ -73,7 +96,7 @@ def hyde_query(user_question: str) -> str:
         )
         return response.choices[0].message.content
     except:
-        return user_question  # fallback
+        return user_question
 
 def retrieve_and_rerank(query: str, k_initial: int = 15, k_final: int = 6):
     hyde = hyde_query(query)
@@ -88,17 +111,15 @@ def retrieve_and_rerank(query: str, k_initial: int = 15, k_final: int = 6):
     if not docs:
         return ""
 
-    # FlashRank reranking
     rerank_request = RerankRequest(
         query=query,
         passages=[{"text": d.page_content, "meta": d.metadata} for d in docs]
     )
     reranked = ranker.rerank(rerank_request)
 
-    # Build clean context with sources
     context_parts = []
     for item in reranked[:k_final]:
-        meta = item["meta"]  # Fix: item.passage -> item
+        meta = item["meta"]
         source = meta.get("source_file", "Document")
         page = meta.get("page", "N/A")
         context_parts.append(f"[Source: {source} | Page {page}]\n{item['text']}")
@@ -123,7 +144,7 @@ for key in ["messages", "uploaded_files_hash", "session_id"]:
         if key == "messages":
             st.session_state[key] = []
         elif key == "session_id":
-            st.session_state[key] = hashlib.sha256(str(datetime.now()).encode()).hexdigest()[:16]  # NEW: Unique session ID
+            st.session_state[key] = hashlib.sha256(str(datetime.now()).encode()).hexdigest()[:16]  # Unique session ID
         else:
             st.session_state[key] = None
 
@@ -139,8 +160,9 @@ with st.sidebar:
         h = hash(tuple((f.name, f.size) for f in uploaded))
         if st.session_state.uploaded_files_hash != h:
             with st.spinner("Indexing documents..."):
-                process_uploaded_files(uploaded, embeddings)  # NEW: Process to temp
-                st.session_state.dynamic_db.add_documents(temp_db.get()["documents"])  # NEW: Append to persistent DB
+                new_chunks = process_uploaded_files(uploaded, embeddings)
+                if new_chunks:
+                    st.session_state.dynamic_db.add_documents(new_chunks)  # Append to persistent DB
             st.session_state.uploaded_files_hash = h
             st.success(f"Added {len(uploaded)} document(s)")
 
@@ -153,7 +175,7 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-    # NEW: Simple log viewer (for admins)
+    # NEW: Simple log viewer
     with st.expander("📊 Feedback Logs"):
         logs = conn.execute("SELECT timestamp, query, thumbs FROM feedback ORDER BY id DESC LIMIT 10").fetchall()
         for log in logs:
@@ -172,15 +194,15 @@ for msg in st.session_state.messages:
                         st.session_state.messages = st.session_state.messages[:-1]
                         st.rerun()
                 with col2:
-                    if st.button("👍", key=f"up_final_{len(st.session_state.messages)}"):
-                         conn.execute("INSERT INTO feedback (session_id, timestamp, query, response, thumbs) VALUES (?, ?, ?, ?, ?)",
-                                    (st.session_state.session_id, datetime.now().isoformat(), prompt, full, "up"))
-                         conn.commit()
+                    if st.button("👍", key=f"up_{msg.get('id')}"):
+                        conn.execute("INSERT INTO feedback (session_id, timestamp, query, response, thumbs) VALUES (?, ?, ?, ?, ?)",
+                                    (st.session_state.session_id, datetime.now().isoformat(), st.session_state.messages[-2]["content"], msg["content"], "up"))
+                        conn.commit()
                 with col3:
-                    if st.button("👎", key=f"down_final_{len(st.session_state.messages)}"):
-                         conn.execute("INSERT INTO feedback (session_id, timestamp, query, response, thumbs) VALUES (?, ?, ?, ?, ?)",
-                                    (st.session_state.session_id, datetime.now().isoformat(), prompt, full, "down"))
-                         conn.commit()
+                    if st.button("👎", key=f"down_{msg.get('id')}"):
+                        conn.execute("INSERT INTO feedback (session_id, timestamp, query, response, thumbs) VALUES (?, ?, ?, ?, ?)",
+                                    (st.session_state.session_id, datetime.now().isoformat(), st.session_state.messages[-2]["content"], msg["content"], "down"))
+                        conn.commit()
                 with col4:
                     if st.button("✏️ Edit question", key=f"edit_{msg.get('id')}"):
                         st.session_state.pending_edit = st.session_state.messages[-2]["content"]
@@ -197,7 +219,6 @@ if prompt := st.chat_input("Ask anything..."):
         placeholder = st.empty()
         full = ""
 
-        # PHASE 2 MAGIC HAPPENS HERE
         context = retrieve_and_rerank(prompt, k_initial=15, k_final=6) if rag_on else ""
         system_prompt = f"""You are a world-class enterprise knowledge assistant.
 Use ONLY the provided context below. Cite sources clearly using [Source: ...].
@@ -230,9 +251,15 @@ Answer:"""
                     st.session_state.messages.pop()
                     st.rerun()
             with c2:
-                st.button("👍", key=f"up_final_{len(st.session_state.messages)}")
+                if st.button("👍", key=f"up_final_{len(st.session_state.messages)}"):
+                    conn.execute("INSERT INTO feedback (session_id, timestamp, query, response, thumbs) VALUES (?, ?, ?, ?, ?)",
+                                (st.session_state.session_id, datetime.now().isoformat(), prompt, full, "up"))
+                    conn.commit()
             with c3:
-                st.button("👎", key=f"down_final_{len(st.session_state.messages)}")
+                if st.button("👎", key=f"down_final_{len(st.session_state.messages)}"):
+                    conn.execute("INSERT INTO feedback (session_id, timestamp, query, response, thumbs) VALUES (?, ?, ?, ?, ?)",
+                                (st.session_state.session_id, datetime.now().isoformat(), prompt, full, "down"))
+                    conn.commit()
             with c4:
                 if st.button("✏️ Edit question", key=f"edit_final_{len(st.session_state.messages)}"):
                     st.session_state.pending_edit = prompt
@@ -264,7 +291,6 @@ Answer:"""
             })
 
         except APIError as e:
-            # === FINAL, NO-ERROR, PERFECT PANW PRISMA GUARDRAIL PARSER ===
             report_id = "N/A"
             scan_id = "N/A"
             guardrail_name = "Unknown"
@@ -300,7 +326,6 @@ Answer:"""
                 if rid: report_id = rid.group(1)
                 if sid: scan_id = sid.group(1)
 
-            # === FINAL PERFECT ALERT (NO VARIABLE MISMATCH) ===
             st.error(
                 "⚠️ **SECURITY ALERT: Request Blocked**\n\n"
                 "Your request was blocked due to a guardrail policy violation.\n\n"
@@ -315,5 +340,6 @@ Answer:"""
                 "🔍 **Please quote the Report ID above** when contacting IT Security for review or appeal.\n\n"
                 "Support: **it.security@yourcompany.com**"
             )
+
 st.divider()
-st.success("🚀 **Phase 2 ACTIVE** — HyDE + FlashRank reranking enabled | Accuracy +25–40%")
+st.success("🚀 **Phase 3 ACTIVE** — Persistence + Feedback Logging Enabled | Logs in Sidebar")
