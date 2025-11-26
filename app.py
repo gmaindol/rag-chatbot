@@ -92,13 +92,13 @@ def hyde_query(user_question: str) -> str:
             model=SUGGESTION_MODEL,
             messages=[{"role": "user", "content": f"Give a detailed, factual answer to this question (no disclaimers):\n\n{user_question}"}],
             max_tokens=300,
-            temperature=0.3
+            temperature=0.0
         )
         return response.choices[0].message.content
     except:
         return user_question
 
-def retrieve_and_rerank(query: str, k_initial: int = 15, k_final: int = 6):
+def retrieve_and_rerank(query: str, k_initial: int = 25, k_final: int = 6):
     hyde = hyde_query(query)
     search_query = f"{query}\n\n{hyde}"
 
