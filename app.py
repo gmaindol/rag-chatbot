@@ -9,6 +9,7 @@ import os
 import re
 import streamlit as st
 import tempfile
+import hashlib
 
 # ==================================== CONFIG ====================================
 VECTOR_DB_DIR = "./chroma_db"
