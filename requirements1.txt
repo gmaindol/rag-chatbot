@@ -18,3 +18,5 @@ lxml
 python-docx
 unstructured
 sentence-transformers
+flashrank
+sqlite3
