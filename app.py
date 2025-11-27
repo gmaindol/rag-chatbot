@@ -342,4 +342,4 @@ Answer:"""
             )
 
 st.divider()
-st.success("🚀 **Phase 3 ACTIVE** — Persistence + Feedback Logging Enabled | Logs in Sidebar")
+st.success("🚀 **RAG-CHAT-BOT** — Personal Assistance")
